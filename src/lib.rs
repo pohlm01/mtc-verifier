@@ -46,17 +46,23 @@ mod test {
     #[test]
     fn valid_cert() {
         env_logger::init();
-        
+
         let mut root_store = MemoryTaiRootStore::default();
         root_store.add("62253.12.15".parse().unwrap(), ProofType::MerkleTreeSha256);
-        root_store.add_root_hash(
-            "62253.12.15".parse().unwrap(),
-            decode_hex("a7b081f10c7116c30781a957c3f52625c4d831c8d61ceea021db101ab3c901cf").unwrap(),
-        ).unwrap();
-        root_store.add_root_hash(
-            "62253.12.15".parse().unwrap(),
-            decode_hex("ec54c78c4353af4f337edd66d3527b6fcc15a6281f5ff45701e290dd9ba53f18").unwrap(),
-        ).unwrap();
+        root_store
+            .add_root_hash(
+                "62253.12.15".parse().unwrap(),
+                decode_hex("a7b081f10c7116c30781a957c3f52625c4d831c8d61ceea021db101ab3c901cf")
+                    .unwrap(),
+            )
+            .unwrap();
+        root_store
+            .add_root_hash(
+                "62253.12.15".parse().unwrap(),
+                decode_hex("ec54c78c4353af4f337edd66d3527b6fcc15a6281f5ff45701e290dd9ba53f18")
+                    .unwrap(),
+            )
+            .unwrap();
 
         let bytes = include_bytes!("../assets/my-cert");
         verify_cert(bytes, &root_store).unwrap();

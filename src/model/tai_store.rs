@@ -38,7 +38,11 @@ impl TaiRootStore for MemoryTaiRootStore {
         let hash = params
             .root_hashes
             .get(batch_id.batch_number - params.first_batch_number);
-        trace!("resolved root_hash for batch_id {:?} as {:?}", batch_id, hash);
+        trace!(
+            "resolved root_hash for batch_id {:?} as {:?}",
+            batch_id,
+            hash
+        );
         hash
     }
 }

@@ -1,7 +1,8 @@
 use crate::model::subject::SubjectType;
-use crate::model::{Encode, Hashable};
+use crate::model::{Encode, Hashable, OwnedPayloadU16};
 use crate::Hash::Sha256;
-use crate::{Assertion, Claim, Hash, Subject, TrustAnchorIdentifier, SHA256};
+use crate::{Assertion, Claim, Hash, SignatureScheme, Subject, TrustAnchorIdentifier, SHA256};
+use sha2::Digest;
 
 pub(crate) struct HashAssertionInput<'a> {
     // u8 distinguisher: 2
@@ -12,8 +13,13 @@ pub(crate) struct HashAssertionInput<'a> {
 
 pub(crate) struct AbridgedAssertion<'a> {
     pub(crate) subject_type: SubjectType,
-    pub(crate) subject_info_hash: Hash<'a>,
+    pub(crate) abridged_subject_info: OwnedPayloadU16,
     pub(crate) claims: Vec<Claim<'a>>,
+}
+
+pub(crate) struct AbridgedTLSSubjectInfo<'a> {
+    pub(crate) signature_scheme: SignatureScheme,
+    pub(crate) public_key_hash: Hash<'a>,
 }
 
 pub(crate) struct HashNodeInput<'a> {
@@ -23,13 +29,6 @@ pub(crate) struct HashNodeInput<'a> {
     pub(crate) level: u8,
     pub(crate) left: Hash<'a>,
     pub(crate) right: Hash<'a>,
-}
-
-pub(crate) struct HashEmptyInput {
-    // u8 distinguisher: 0
-    pub(crate) batch_id: TrustAnchorIdentifier,
-    pub(crate) index: u64,
-    pub(crate) level: u8,
 }
 
 impl Encode for HashAssertionInput<'_> {
@@ -47,13 +46,22 @@ impl Hashable for HashAssertionInput<'_> {}
 impl Encode for AbridgedAssertion<'_> {
     fn encode(&self) -> Vec<u8> {
         let mut res = self.subject_type.encode();
-        res.extend_from_slice(self.subject_info_hash.bytes());
+        res.extend_from_slice(&self.abridged_subject_info.encode());
         res.extend_from_slice(&self.claims.encode());
 
         res
     }
 }
 impl Hashable for AbridgedAssertion<'_> {}
+
+impl Encode for AbridgedTLSSubjectInfo<'_> {
+    fn encode(&self) -> Vec<u8> {
+        let mut res = self.signature_scheme.encode();
+        res.extend_from_slice(self.public_key_hash.bytes());
+        res
+    }
+}
+impl Hashable for AbridgedTLSSubjectInfo<'_> {}
 
 impl Encode for HashNodeInput<'_> {
     fn encode(&self) -> Vec<u8> {
@@ -68,28 +76,28 @@ impl Encode for HashNodeInput<'_> {
 }
 impl Hashable for HashNodeInput<'_> {}
 
-impl Encode for HashEmptyInput {
-    fn encode(&self) -> Vec<u8> {
-        let mut res = vec![0];
-        res.extend_from_slice(&self.batch_id.encode());
-        res.extend_from_slice(&self.index.to_be_bytes());
-        res.extend_from_slice(&self.level.to_be_bytes());
-        res
-    }
-}
-impl Hashable for HashEmptyInput {}
-
 impl<'a> From<Assertion<'a>> for AbridgedAssertion<'a> {
     fn from(a: Assertion<'a>) -> Self {
-        let (subject_type, hash) = match &a.subject {
-            Subject::Tls(info) => (SubjectType::Tls, info.hash::<sha2::Sha256>()),
+        let (subject_type, abridged_info) = match &a.subject {
+            Subject::Tls(info) => (
+                SubjectType::Tls,
+                AbridgedTLSSubjectInfo {
+                    signature_scheme: info.signature,
+                    public_key_hash: Sha256(SHA256::Owned(
+                        sha2::Sha256::digest(info.public_key.0)
+                            .as_slice()
+                            .try_into()
+                            .unwrap(),
+                    )),
+                },
+            ),
             Subject::Unknown => {
                 unimplemented!()
             }
         };
         Self {
             subject_type,
-            subject_info_hash: Sha256(SHA256::Owned(hash.as_slice().try_into().unwrap())),
+            abridged_subject_info: OwnedPayloadU16(abridged_info.encode()),
             claims: a.claims,
         }
     }

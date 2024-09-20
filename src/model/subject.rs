@@ -1,7 +1,6 @@
-use crate::model::{Decode, Encode, Hashable, PayloadU16, SignatureScheme};
+use crate::model::{Decode, Encode, PayloadU16, SignatureScheme};
 use nom::number::complete::u16;
 use nom::IResult;
-use sha2::Digest;
 
 #[derive(Debug, Clone)]
 pub enum Subject<'a> {
@@ -11,8 +10,8 @@ pub enum Subject<'a> {
 
 #[derive(Debug, Clone)]
 pub struct TLSSubjectInfo<'a> {
-    signature: SignatureScheme,
-    public_key: PayloadU16<'a>,
+    pub(crate) signature: SignatureScheme,
+    pub(crate) public_key: PayloadU16<'a>,
 }
 
 impl<'a> Decode<'a> for TLSSubjectInfo<'a> {
@@ -29,21 +28,21 @@ impl<'a> Decode<'a> for TLSSubjectInfo<'a> {
     }
 }
 
-impl Encode for TLSSubjectInfo<'_> {
-    fn encode(&self) -> Vec<u8> {
-        let mut bytes = self.signature.encode();
-        bytes.extend_from_slice(&self.public_key.encode());
-        bytes
-    }
-}
-
-impl Hashable for TLSSubjectInfo<'_> {}
-
-impl TLSSubjectInfo<'_> {
-    pub(super) fn hash<D: Digest>(&self) -> Vec<u8> {
-        D::digest(self.encode()).to_vec()
-    }
-}
+// impl Encode for TLSSubjectInfo<'_> {
+//     fn encode(&self) -> Vec<u8> {
+//         let mut bytes = self.signature.encode();
+//         bytes.extend_from_slice(&self.public_key.encode());
+//         bytes
+//     }
+// }
+//
+// impl Hashable for TLSSubjectInfo<'_> {}
+//
+// impl TLSSubjectInfo<'_> {
+//     pub(super) fn hash<D: Digest>(&self) -> Vec<u8> {
+//         D::digest(self.encode()).to_vec()
+//     }
+// }
 
 #[derive(Debug)]
 pub(super) enum SubjectType {

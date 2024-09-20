@@ -61,7 +61,7 @@ impl Encode for TrustAnchorIdentifier {
         segements.push(self.batch_number.0);
         let oid: Oid = segements.into();
         let length = oid.0.len();
-        assert!(length <= std::u8::MAX as usize);
+        assert!(length <= u8::MAX as usize);
         let mut result = Vec::with_capacity(length + 1);
         result.push(length as u8);
         result.extend_from_slice(&oid.0);

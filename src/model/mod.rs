@@ -12,7 +12,7 @@ pub use certificate::Certificate;
 pub use claim::Claim;
 use nom::bytes::complete::take;
 use nom::number::complete::{u16 as nom_u16, u8 as nom_u8};
-use nom::{IResult};
+use nom::IResult;
 pub use proof::{MerkleTreeProofSHA256, Proof, ProofType};
 use sha2::{Digest, Sha256};
 use std::fmt::{Debug, Formatter};
@@ -299,12 +299,29 @@ impl Encode for PayloadU8<'_> {
     fn encode(&self) -> Vec<u8> {
         debug_assert!(self.0.len() < u8::MAX as usize);
         let mut res = (self.0.len() as u8).to_be_bytes().to_vec();
-        res.extend_from_slice(&self.0);
+        res.extend_from_slice(self.0);
         res
     }
 }
 
 impl Debug for PayloadU8<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:x?}", self.0)
+    }
+}
+
+struct OwnedPayloadU16(Vec<u8>);
+
+impl Encode for OwnedPayloadU16 {
+    fn encode(&self) -> Vec<u8> {
+        let mut res = Vec::with_capacity(2 + self.0.len());
+        res.extend_from_slice(&(self.0.len() as u16).to_be_bytes());
+        res.extend_from_slice(&self.0);
+        res
+    }
+}
+
+impl Debug for OwnedPayloadU16 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:x?}", self.0)
     }
