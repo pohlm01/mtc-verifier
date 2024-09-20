@@ -1,13 +1,13 @@
 use crate::model::trust_anchor_identifier::TrustAnchorIdentifier;
-use crate::model::{Decode, HashValueSHA256, PayloadU16};
+use crate::model::{Decode, PayloadU16, SHA256};
+use crate::TaiRootStore;
 use log::warn;
-use nom::error::Error;
 use nom::number::complete::u64;
 use nom::IResult;
 
 #[derive(Debug)]
 pub(super) struct ProofBinary<'a> {
-    trust_anchor: TrustAnchorIdentifier<'a>,
+    trust_anchor: TrustAnchorIdentifier,
     proof_data: PayloadU16<'a>,
 }
 
@@ -25,45 +25,52 @@ impl<'a> Decode<'a> for ProofBinary<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Proof<'a> {
-    trust_anchor: TrustAnchorIdentifier<'a>,
-    proof_data: ProofData<'a>,
+    pub(crate) trust_anchor: TrustAnchorIdentifier,
+    pub(crate) proof_data: ProofData<'a>,
 }
 
-impl<'a> TryFrom<ProofBinary<'a>> for Proof<'a> {
-    type Error = nom::Err<Error<&'a [u8]>>;
-    fn try_from(proof: ProofBinary<'a>) -> Result<Self, Self::Error> {
-        match proof.trust_anchor.proof_type() {
-            ProofType::MerkleTreeSha256 => {
+impl<'a> Proof<'a> {
+    pub(super) fn try_from(
+        proof: ProofBinary<'a>,
+        root_store: &dyn TaiRootStore,
+    ) -> IResult<&'a [u8], Self> {
+        match root_store.proof_type(&proof.trust_anchor) {
+            Some(ProofType::MerkleTreeSha256) => {
                 let (bytes, tree) = MerkleTreeProofSHA256::decode(proof.proof_data.0)?;
-                assert!(bytes.is_empty());
-                Ok(Self {
-                    trust_anchor: proof.trust_anchor,
-                    proof_data: ProofData::MerkleTreeSha256(tree),
-                })
+                Ok((
+                    bytes,
+                    Self {
+                        trust_anchor: proof.trust_anchor,
+                        proof_data: ProofData::MerkleTreeSha256(tree),
+                    },
+                ))
             }
-            ProofType::Unknown => {
+            _ => {
                 warn!("Unknown proof {:?}", proof);
-                Ok(Self {
-                    trust_anchor: proof.trust_anchor,
-                    proof_data: ProofData::Unknown,
-                })
+                Ok((
+                    &[],
+                    Self {
+                        trust_anchor: proof.trust_anchor,
+                        proof_data: ProofData::Unknown(proof.proof_data.0),
+                    },
+                ))
             }
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ProofData<'a> {
     MerkleTreeSha256(MerkleTreeProofSHA256<'a>),
-    Unknown,
+    Unknown(&'a [u8]),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MerkleTreeProofSHA256<'a> {
-    index: u64,
-    path: Vec<HashValueSHA256<'a>>,
+    pub(crate) index: u64,
+    pub(crate) path: Vec<SHA256<'a>>,
 }
 
 impl<'a> Decode<'a> for MerkleTreeProofSHA256<'a> {

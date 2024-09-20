@@ -4,10 +4,10 @@ use crate::model::{Decode, PayloadU16};
 use nom::error::Error;
 use nom::IResult;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Assertion<'a> {
-    subject: Subject<'a>,
-    claims: Vec<Claim<'a>>,
+    pub(super) subject: Subject<'a>,
+    pub(super) claims: Vec<Claim<'a>>,
 }
 
 impl<'a> TryFrom<AssertionBinary<'a>> for Assertion<'a> {
