@@ -5,7 +5,7 @@ use nom::IResult;
 #[derive(Debug, Clone)]
 pub enum Subject<'a> {
     Tls(TLSSubjectInfo<'a>),
-    Unknown,
+    Unknown(PayloadU16<'a>),
 }
 
 #[derive(Debug, Clone)]
@@ -28,13 +28,14 @@ impl<'a> Decode<'a> for TLSSubjectInfo<'a> {
     }
 }
 
-// impl Encode for TLSSubjectInfo<'_> {
-//     fn encode(&self) -> Vec<u8> {
-//         let mut bytes = self.signature.encode();
-//         bytes.extend_from_slice(&self.public_key.encode());
-//         bytes
-//     }
-// }
+impl Encode for TLSSubjectInfo<'_> {
+    fn encode(&self) -> Vec<u8> {
+        let mut bytes = self.signature.encode();
+        bytes.extend_from_slice(&self.public_key.encode());
+        bytes
+    }
+}
+
 //
 // impl Hashable for TLSSubjectInfo<'_> {}
 //

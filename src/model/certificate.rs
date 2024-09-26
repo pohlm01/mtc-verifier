@@ -1,7 +1,7 @@
 use crate::model::assertion::AssertionBinary;
 use crate::model::proof::{Proof, ProofBinary, ProofData};
 use crate::model::tree::{HashAssertionInput, HashNodeInput};
-use crate::model::{Assertion, Decode, Hashable};
+use crate::model::{Assertion, Decode, Encode, Hashable};
 use crate::{Error, Hash, TaiRootStore};
 use nom::IResult;
 
@@ -25,6 +25,12 @@ impl<'a> Certificate<'a> {
                 proof,
             },
         ))
+    }
+
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = self.assertion.encode();
+        bytes.append(&mut self.proof.encode());
+        bytes
     }
 
     pub fn recompute_root_hash(&self) -> Result<Hash<'static>, Error> {

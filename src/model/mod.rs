@@ -166,6 +166,12 @@ impl<'a> Decode<'a> for SHA256<'a> {
     }
 }
 
+impl Encode for SHA256<'_> {
+    fn encode(&self) -> Vec<u8> {
+        self.bytes().to_vec()
+    }
+}
+
 impl Debug for SHA256<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "sha256:{}", self.to_hex())

@@ -1,6 +1,6 @@
 use crate::model::claim::{Claim, ClaimBinary};
 use crate::model::subject::{Subject, SubjectType, TLSSubjectInfo};
-use crate::model::{Decode, PayloadU16};
+use crate::model::{Decode, Encode, PayloadU16};
 use nom::error::Error;
 use nom::IResult;
 
@@ -20,7 +20,7 @@ impl<'a> TryFrom<AssertionBinary<'a>> for Assertion<'a> {
                 assert!(bytes.is_empty());
                 Subject::Tls(info)
             }
-            SubjectType::Unknown => Subject::Unknown,
+            SubjectType::Unknown => Subject::Unknown(assertion.subject_info),
         };
         Ok(Self {
             subject,
@@ -32,6 +32,17 @@ impl<'a> TryFrom<AssertionBinary<'a>> for Assertion<'a> {
         })
     }
 }
+
+// impl<'a> From<Assertion<'_>> for AssertionBinary<'_> {
+//     fn from(a: Assertion) -> Self {
+//
+//         Self {
+//             subject_type,
+//             subject_info,
+//             claims: vec![],
+//         }
+//     }
+// }
 
 #[derive(Debug)]
 pub(super) struct AssertionBinary<'a> {
@@ -53,5 +64,18 @@ impl<'a> Decode<'a> for AssertionBinary<'a> {
                 claims,
             },
         ))
+    }
+}
+
+impl Encode for Assertion<'_> {
+    fn encode(&self) -> Vec<u8> {
+        let (subject_type, mut subject_info) = match &self.subject {
+            Subject::Tls(info) => (SubjectType::Tls, PayloadU16(&info.encode()).encode()),
+            Subject::Unknown(bytes) => (SubjectType::Unknown, bytes.encode()),
+        };
+        let mut bytes = subject_type.encode();
+        bytes.append(&mut subject_info);
+        bytes.append(&mut self.claims.encode());
+        bytes
     }
 }

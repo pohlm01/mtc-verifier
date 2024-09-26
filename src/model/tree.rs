@@ -91,7 +91,7 @@ impl<'a> From<Assertion<'a>> for AbridgedAssertion<'a> {
                     )),
                 },
             ),
-            Subject::Unknown => {
+            Subject::Unknown(_) => {
                 unimplemented!()
             }
         };

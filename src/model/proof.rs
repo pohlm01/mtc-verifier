@@ -1,5 +1,5 @@
 use crate::model::trust_anchor_identifier::TrustAnchorIdentifier;
-use crate::model::{Decode, PayloadU16, SHA256};
+use crate::model::{Decode, Encode, PayloadU16, SHA256};
 use crate::TaiRootStore;
 use log::warn;
 use nom::number::complete::u64;
@@ -81,8 +81,28 @@ impl<'a> Decode<'a> for MerkleTreeProofSHA256<'a> {
     }
 }
 
+impl Encode for MerkleTreeProofSHA256<'_> {
+    fn encode(&self) -> Vec<u8> {
+        let mut bytes = self.index.to_be_bytes().to_vec();
+        bytes.append(&mut self.path.encode());
+        bytes
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum ProofType {
     MerkleTreeSha256,
     Unknown,
+}
+
+impl Encode for Proof<'_> {
+    fn encode(&self) -> Vec<u8> {
+        let mut proof_data = match &self.proof_data {
+            ProofData::MerkleTreeSha256(data) => data.encode(),
+            ProofData::Unknown(data) => data.to_vec(),
+        };
+        let mut bytes = self.trust_anchor.encode();
+        bytes.append(&mut proof_data);
+        bytes
+    }
 }
