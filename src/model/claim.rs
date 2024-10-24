@@ -19,40 +19,40 @@ impl ListSize for ClaimBinary<'_> {
 }
 
 #[derive(Debug, Clone)]
-pub enum Claim<'a> {
-    Dns(Vec<DNSName<'a>>),
-    DnsWildcard(Vec<DNSName<'a>>),
+pub enum Claim {
+    Dns(Vec<DNSName>),
+    DnsWildcard(Vec<DNSName>),
     IPv4(Vec<Ipv4Addr>),
     IPv6(Vec<Ipv6Addr>),
     Unknown,
 }
 
-impl ListSize for Claim<'_> {
+impl ListSize for Claim {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-impl<'a> TryFrom<ClaimBinary<'a>> for Claim<'a> {
+impl<'a> TryFrom<&'a ClaimBinary<'a>> for Claim {
     type Error = nom::Err<Error<&'a [u8]>>;
 
-    fn try_from(claim: ClaimBinary<'a>) -> Result<Self, Self::Error> {
+    fn try_from(claim: &'a ClaimBinary<'a>) -> Result<Self, Self::Error> {
         match claim.claim_type {
             ClaimType::Dns => {
-                let (rem_bytes, result) = Vec::decode(claim.claim_info.0)?;
+                let (rem_bytes, result) = Vec::decode(claim.claim_info.bytes())?;
                 assert!(rem_bytes.is_empty());
                 Ok(Claim::Dns(result))
             }
             ClaimType::DnsWildcard => {
-                let (rem_bytes, result) = Vec::decode(claim.claim_info.0)?;
+                let (rem_bytes, result) = Vec::decode(claim.claim_info.bytes())?;
                 assert!(rem_bytes.is_empty());
                 Ok(Claim::DnsWildcard(result))
             }
             ClaimType::Ipv4 => {
-                let (rem_bytes, result) = Vec::decode(claim.claim_info.0)?;
+                let (rem_bytes, result) = Vec::decode(claim.claim_info.bytes())?;
                 assert!(rem_bytes.is_empty());
                 Ok(Claim::IPv4(result))
             }
             ClaimType::Ipv6 => {
-                let (rem_bytes, result) = Vec::decode(claim.claim_info.0)?;
+                let (rem_bytes, result) = Vec::decode(claim.claim_info.bytes())?;
                 assert!(rem_bytes.is_empty());
                 Ok(Claim::IPv6(result))
             }
@@ -64,7 +64,7 @@ impl<'a> TryFrom<ClaimBinary<'a>> for Claim<'a> {
     }
 }
 
-impl Encode for Claim<'_> {
+impl Encode for Claim {
     fn encode(&self) -> Vec<u8> {
         let (t, i) = match self {
             Claim::Dns(c) => (ClaimType::Dns, c.encode()),
@@ -78,39 +78,39 @@ impl Encode for Claim<'_> {
         };
         ClaimBinary {
             claim_type: t,
-            claim_info: PayloadU16(&i),
+            claim_info: PayloadU16::Borrowed(&i),
         }
         .encode()
     }
 }
 
 #[derive(Clone)]
-pub struct DNSName<'a>(pub &'a [u8]);
+pub struct DNSName(pub PayloadU8);
 
-impl ListSize for DNSName<'_> {
+impl ListSize for DNSName {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-impl Debug for DNSName<'_> {
+impl Debug for DNSName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "DNSName({})", std::str::from_utf8(self.0).unwrap())
+        write!(f, "DNSName({})", std::str::from_utf8(&self.0 .0).unwrap())
     }
 }
 
-impl<'a> Decode<'a> for DNSName<'a> {
-    fn decode(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+impl Decode<'_> for DNSName {
+    fn decode(input: &[u8]) -> IResult<&[u8], Self> {
         let (bytes, PayloadU8(name)) = PayloadU8::decode(input)?;
         assert_ne!(name.len(), 0, "A DNS name must not be of length 0");
         assert!(name.is_ascii(), "DNS name must be valid ASCII");
         // TODO check if lowercase
         // TODO proper error handling (no except() or assert!())
-        Ok((bytes, Self(name)))
+        Ok((bytes, Self(PayloadU8(name))))
     }
 }
 
-impl Encode for DNSName<'_> {
+impl Encode for DNSName {
     fn encode(&self) -> Vec<u8> {
-        PayloadU8(self.0).encode()
+        self.0.encode()
     }
 }
 

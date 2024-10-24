@@ -1,9 +1,10 @@
 use crate::model::assertion::AssertionBinary;
 use crate::model::proof::{Proof, ProofBinary, ProofData};
+// use crate::model::tai_store::test::TestStore;
 use crate::model::tree::{HashAssertionInput, HashNodeInput};
 use crate::model::{Assertion, Decode, Encode, Hashable};
-use crate::{Error, Hash, TaiRootStore};
-use nom::IResult;
+use crate::{Error, Hash, SignatureScheme, Subject, TaiRootStore};
+use log::warn;
 
 #[derive(Debug, Clone)]
 pub struct Certificate<'a> {
@@ -11,20 +12,22 @@ pub struct Certificate<'a> {
     pub(crate) proof: Proof<'a>,
 }
 
-impl<'a> Certificate<'a> {
-    pub fn decode(input: &'a [u8], root_store: &dyn TaiRootStore) -> IResult<&'a [u8], Self> {
+impl Certificate<'_> {
+    pub fn decode<'a>(
+        input: &'a [u8],
+        root_store: &dyn TaiRootStore,
+    ) -> Result<Certificate<'static>, nom::Err<nom::error::Error<&'a [u8]>>> {
         let (bytes, assertion) = AssertionBinary::decode(input)?;
         let (bytes, proof) = ProofBinary::decode(bytes)?;
         assert!(bytes.is_empty());
-        let (bytes, proof) = Proof::try_from(proof, root_store)?;
+        let (bytes, proof) = Proof::try_from(&proof, root_store).unwrap();
         assert!(bytes.is_empty());
-        Ok((
-            bytes,
-            Self {
-                assertion: assertion.try_into()?,
-                proof,
-            },
-        ))
+        Ok(Certificate {
+            assertion: TryInto::<Assertion>::try_into(&assertion)
+                .unwrap()
+                .into_owned(),
+            proof: proof.into_owned(),
+        })
     }
 
     pub fn encode(&self) -> Vec<u8> {
@@ -33,7 +36,7 @@ impl<'a> Certificate<'a> {
         bytes
     }
 
-    pub fn recompute_root_hash(&self) -> Result<Hash<'static>, Error> {
+    pub fn recompute_root_hash(&self) -> Result<Hash, Error> {
         let batch_id = &self.proof.trust_anchor;
         let proof = match &self.proof.proof_data {
             ProofData::MerkleTreeSha256(p) => p,
@@ -73,5 +76,28 @@ impl<'a> Certificate<'a> {
         assert_eq!(remaining, 0);
 
         Ok(hash)
+    }
+
+    pub fn signature_scheme(&self) -> Option<SignatureScheme> {
+        match &self.assertion.subject {
+            Subject::Tls(tls) => Some(tls.signature),
+            Subject::Unknown(_) => None,
+        }
+    }
+
+    pub fn public_key(&self) -> Option<&[u8]> {
+        match &self.assertion.subject {
+            Subject::Tls(tls) => Some(tls.public_key.bytes()),
+            Subject::Unknown(_) => {
+                warn!("Could not read public key from unknown subject type");
+                None
+            }
+        }
+    }
+}
+
+impl Certificate<'_> {
+    pub fn trust_anchor_identifier(&self) -> String {
+        self.proof.trust_anchor.to_string()
     }
 }

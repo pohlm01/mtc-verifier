@@ -10,8 +10,8 @@ use std::str::FromStr;
 struct Oid(Vec<u8>);
 #[derive(Eq, PartialEq, Hash, Clone)]
 pub struct Issuer(Oid);
-#[derive(Clone, Copy, Debug)]
-pub struct BatchNumber(u32);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct BatchNumber(pub(crate) u32);
 
 impl Sub<usize> for BatchNumber {
     type Output = usize;
@@ -27,6 +27,13 @@ impl Encode for Issuer {
     }
 }
 
+impl<'a> Decode<'a> for Issuer {
+    fn decode(input: &'a [u8]) -> IResult<&'a [u8], Self> {
+        let (bytes, oid) = Oid::decode(input)?;
+        Ok((bytes, Self(oid)))
+    }
+}
+
 impl Deref for BatchNumber {
     type Target = u32;
 
@@ -35,10 +42,16 @@ impl Deref for BatchNumber {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TrustAnchorIdentifier {
     pub issuer: Issuer,
     pub batch_number: BatchNumber,
+}
+
+impl Display for TrustAnchorIdentifier {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}", self.issuer.0, self.batch_number.0)
+    }
 }
 
 impl Decode<'_> for TrustAnchorIdentifier {
@@ -66,6 +79,19 @@ impl Encode for TrustAnchorIdentifier {
         result.push(length as u8);
         result.extend_from_slice(&oid.0);
         result
+    }
+}
+
+impl IntoIterator for TrustAnchorIdentifier {
+    type Item = u32;
+    type IntoIter = std::iter::Chain<std::vec::IntoIter<u32>, std::iter::Once<u32>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.issuer
+            .0
+            .segments()
+            .into_iter()
+            .chain(std::iter::once(self.batch_number.0))
     }
 }
 

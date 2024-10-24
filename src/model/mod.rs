@@ -1,11 +1,11 @@
-mod assertion;
-mod certificate;
-mod claim;
-mod proof;
-mod subject;
-mod tai_store;
-mod tree;
-mod trust_anchor_identifier;
+pub(crate) mod assertion;
+pub(crate) mod certificate;
+pub(crate) mod claim;
+pub(crate) mod proof;
+pub(crate) mod subject;
+pub(crate) mod tai_store;
+pub(crate) mod tree;
+pub(crate) mod trust_anchor_identifier;
 
 pub use assertion::Assertion;
 pub use certificate::Certificate;
@@ -20,22 +20,22 @@ pub use subject::{Subject, TLSSubjectInfo};
 pub use tai_store::{MemoryTaiRootStore, TaiRootStore};
 pub use trust_anchor_identifier::{Issuer, TrustAnchorIdentifier};
 
-trait Decode<'a> {
+pub(super) trait Decode<'a> {
     fn decode(input: &'a [u8]) -> IResult<&'a [u8], Self>
     where
         Self: Sized;
 }
 
-trait Encode {
+pub trait Encode {
     fn encode(&self) -> Vec<u8>;
 }
 
 trait Hashable {
-    fn hash(&self) -> Hash<'static>
+    fn hash(&self) -> Hash
     where
         Self: Encode,
     {
-        Hash::Sha256(SHA256::Owned(
+        Hash::Sha256(SHA256(
             Sha256::digest(self.encode()).as_slice().try_into().unwrap(),
         ))
     }
@@ -48,6 +48,10 @@ trait ListSize {
 enum ListLength {
     U8,
     U16,
+}
+
+pub(crate) trait HashSize {
+    const HASH_SIZE: usize;
 }
 
 impl<'a, T> Decode<'a> for Vec<T>
@@ -111,68 +115,47 @@ where
     }
 }
 
-#[derive(Clone, Eq)]
-pub enum SHA256<'a> {
-    Owned([u8; 32]),
-    Borrowed(&'a [u8; 32]),
-}
-
-impl PartialEq for SHA256<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.bytes() == other.bytes()
-    }
-}
+#[derive(Clone, PartialEq, Eq)]
+pub struct SHA256(pub(crate) [u8; 32]);
 
 // TODO this might no be universally applicable.
 //  Maybe create a new type instead, which implements ListSize
-impl ListSize for SHA256<'_> {
+impl ListSize for SHA256 {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-impl SHA256<'_> {
-    fn into_owned(self) -> SHA256<'static> {
-        match self {
-            SHA256::Owned(o) => SHA256::Owned(o),
-            SHA256::Borrowed(b) => SHA256::Owned(b.to_owned()),
-        }
-    }
+impl HashSize for SHA256 {
+    const HASH_SIZE: usize = 32;
+}
 
+impl SHA256 {
     fn to_hex(&self) -> String {
-        self.bytes()
+        self.0
             .iter()
-            .fold(String::with_capacity(self.bytes().len() * 2), |s, byte| {
+            .fold(String::with_capacity(self.0.len() * 2), |s, byte| {
                 format!("{s}{byte:x?}")
             })
     }
 }
 
-impl<'a> SHA256<'a> {
-    fn bytes(&'a self) -> &'a [u8; 32] {
-        match self {
-            SHA256::Owned(o) => o,
-            SHA256::Borrowed(b) => b,
-        }
-    }
-}
-
-impl<'a> Decode<'a> for SHA256<'a> {
+impl<'a> Decode<'a> for SHA256 {
     fn decode(input: &'a [u8]) -> IResult<&'a [u8], Self> {
         let (bytes, sha) = take(32usize)(input)?;
         // TODO remove `expect()`
         Ok((
             bytes,
-            Self::Borrowed(sha.try_into().expect("sha256 did expect more data")),
+            Self(sha.try_into().expect("sha256 did expect more data")),
         ))
     }
 }
 
-impl Encode for SHA256<'_> {
+impl Encode for SHA256 {
     fn encode(&self) -> Vec<u8> {
-        self.bytes().to_vec()
+        self.0.to_vec()
     }
 }
 
-impl Debug for SHA256<'_> {
+impl Debug for SHA256 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "sha256:{}", self.to_hex())
     }
@@ -180,19 +163,25 @@ impl Debug for SHA256<'_> {
 
 #[non_exhaustive]
 #[derive(Eq, PartialEq)]
-pub enum Hash<'a> {
-    Sha256(SHA256<'a>),
+pub enum Hash {
+    Sha256(SHA256),
 }
 
-impl<'a> Hash<'a> {
-    pub fn bytes(&'a self) -> &'a [u8] {
+impl Hash {
+    pub fn bytes(&self) -> &[u8] {
         match self {
-            Hash::Sha256(sha) => sha.bytes(),
+            Hash::Sha256(sha) => sha.0.as_slice(),
         }
     }
 }
 
-impl Debug for Hash<'_> {
+impl From<[u8; 32]> for SHA256 {
+    fn from(value: [u8; 32]) -> Self {
+        SHA256(value)
+    }
+}
+
+impl Debug for Hash {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Hash::Sha256(hash) => {
@@ -218,7 +207,7 @@ pub enum SignatureScheme {
     RSA_PSS_SHA512,
     ED25519,
     ED448,
-    Unknown,
+    Unknown(u16),
 }
 
 impl<'a> Decode<'a> for SignatureScheme {
@@ -238,7 +227,7 @@ impl<'a> Decode<'a> for SignatureScheme {
             0x0806 => Self::RSA_PSS_SHA512,
             0x0807 => Self::ED25519,
             0x0808 => Self::ED448,
-            _ => Self::Unknown,
+            _ => Self::Unknown(code),
         };
         Ok((bytes, sig))
     }
@@ -260,74 +249,85 @@ impl Encode for SignatureScheme {
             SignatureScheme::RSA_PSS_SHA512 => vec![0x08, 0x06],
             SignatureScheme::ED25519 => vec![0x08, 0x07],
             SignatureScheme::ED448 => vec![0x08, 0x08],
-            SignatureScheme::Unknown => unimplemented!(),
+            SignatureScheme::Unknown(_) => unimplemented!(),
         }
     }
 }
 
 #[derive(Clone)]
-pub struct PayloadU16<'a>(pub &'a [u8]);
+pub enum PayloadU16<'a> {
+    Borrowed(&'a [u8]),
+    Owned(Vec<u8>),
+}
+
+impl<'a> PayloadU16<'a> {
+    pub fn into_owned(self) -> PayloadU16<'static> {
+        match self {
+            Self::Borrowed(p) => PayloadU16::Owned(p.to_vec()),
+            Self::Owned(p) => PayloadU16::Owned(p),
+        }
+    }
+
+    pub fn bytes(&'a self) -> &'a [u8] {
+        match self {
+            PayloadU16::Borrowed(p) => p,
+            PayloadU16::Owned(p) => p.as_slice(),
+        }
+    }
+
+    pub fn len(&self) -> u16 {
+        debug_assert!(self.bytes().len() < u16::MAX as usize);
+        self.bytes().len() as u16
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.bytes().is_empty()
+    }
+}
 
 impl<'a> Decode<'a> for PayloadU16<'a> {
     fn decode(input: &'a [u8]) -> IResult<&'a [u8], Self> {
         let (bytes, length) = nom_u16(nom::number::Endianness::Big)(input)?;
         let (bytes, payload) = take(length)(bytes)?;
-        Ok((bytes, PayloadU16(payload)))
+        Ok((bytes, PayloadU16::Borrowed(payload)))
     }
 }
 
 impl Encode for PayloadU16<'_> {
     fn encode(&self) -> Vec<u8> {
-        debug_assert!(self.0.len() < u16::MAX as usize);
-        let mut res = (self.0.len() as u16).to_be_bytes().to_vec();
-        res.extend_from_slice(self.0);
+        let mut res = self.len().to_be_bytes().to_vec();
+        res.extend_from_slice(self.bytes());
         res
     }
 }
 
 impl Debug for PayloadU16<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:x?}", self.0)
+        write!(f, "{:x?}", self.bytes())
     }
 }
 
-pub struct PayloadU8<'a>(pub &'a [u8]);
+#[derive(Clone)]
+pub struct PayloadU8(pub Vec<u8>);
 
-impl<'a> Decode<'a> for PayloadU8<'a> {
+impl<'a> Decode<'a> for PayloadU8 {
     fn decode(input: &'a [u8]) -> IResult<&'a [u8], Self> {
         let (bytes, length) = nom_u8(input)?;
         let (bytes, payload) = take(length)(bytes)?;
-        Ok((bytes, PayloadU8(payload)))
+        Ok((bytes, PayloadU8(payload.to_vec())))
     }
 }
 
-impl Encode for PayloadU8<'_> {
+impl Encode for PayloadU8 {
     fn encode(&self) -> Vec<u8> {
         debug_assert!(self.0.len() < u8::MAX as usize);
         let mut res = (self.0.len() as u8).to_be_bytes().to_vec();
-        res.extend_from_slice(self.0);
-        res
-    }
-}
-
-impl Debug for PayloadU8<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:x?}", self.0)
-    }
-}
-
-struct OwnedPayloadU16(Vec<u8>);
-
-impl Encode for OwnedPayloadU16 {
-    fn encode(&self) -> Vec<u8> {
-        let mut res = Vec::with_capacity(2 + self.0.len());
-        res.extend_from_slice(&(self.0.len() as u16).to_be_bytes());
         res.extend_from_slice(&self.0);
         res
     }
 }
 
-impl Debug for OwnedPayloadU16 {
+impl Debug for PayloadU8 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:x?}", self.0)
     }

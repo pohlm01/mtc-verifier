@@ -1,6 +1,8 @@
 mod model;
+mod trust_store;
 
 pub use model::*;
+pub use trust_store::*;
 
 #[derive(Debug)]
 pub enum Error {
@@ -13,10 +15,7 @@ pub enum Error {
 }
 
 pub fn verify_cert(cert: &[u8], root_store: &dyn TaiRootStore) -> Result<(), Error> {
-    let (bytes, cert) = Certificate::decode(cert, root_store).unwrap();
-    if !bytes.is_empty() {
-        Err(Error::ExtraBytes)?
-    }
+    let cert = Certificate::decode(cert, root_store).unwrap();
     let root_hash = root_store
         .root_hash(&cert.proof.trust_anchor)
         .ok_or(Error::UnknownCA)?;
@@ -46,7 +45,7 @@ mod test {
     #[test]
     fn valid_cert() {
         env_logger::init();
-
+    
         let mut root_store = MemoryTaiRootStore::default();
         root_store.add("62253.12.15".parse().unwrap(), ProofType::MerkleTreeSha256);
         root_store
@@ -63,7 +62,7 @@ mod test {
                     .unwrap(),
             )
             .unwrap();
-
+    
         let bytes = include_bytes!("../assets/my-cert");
         verify_cert(bytes, &root_store).unwrap();
     }

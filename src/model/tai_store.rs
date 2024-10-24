@@ -2,22 +2,25 @@ use crate::model::proof::ProofType;
 use crate::model::trust_anchor_identifier::Issuer;
 use crate::{Hash, TrustAnchorIdentifier, SHA256};
 use log::trace;
-use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
+use std::collections::hash_map::Entry;
+use std::fmt::Debug;
 
-pub trait TaiRootStore {
+pub trait TaiRootStore: Debug {
     fn proof_type(&self, tai: &TrustAnchorIdentifier) -> Option<ProofType>;
     fn root_hash(&self, tai: &TrustAnchorIdentifier) -> Option<&Hash>;
+    fn supported_tais(&self) -> Vec<TrustAnchorIdentifier>;
 }
 
+#[derive(Debug)]
 struct CAParams {
     proof_type: ProofType,
 
     first_batch_number: usize,
-    root_hashes: VecDeque<Hash<'static>>,
+    root_hashes: VecDeque<Hash>,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct MemoryTaiRootStore {
     ca_params: HashMap<Issuer, CAParams>,
 }
@@ -45,6 +48,10 @@ impl TaiRootStore for MemoryTaiRootStore {
         );
         hash
     }
+
+    fn supported_tais(&self) -> Vec<TrustAnchorIdentifier> {
+        todo!()
+    }
 }
 
 impl MemoryTaiRootStore {
@@ -63,9 +70,7 @@ impl MemoryTaiRootStore {
             Entry::Occupied(mut entry) => {
                 let ca = entry.get_mut();
                 let hash = match ca.proof_type {
-                    ProofType::MerkleTreeSha256 => Hash::Sha256(SHA256::Owned(
-                        root_hash.try_into().map_err(|_| Error::WrongHashLength)?,
-                    )),
+                    ProofType::MerkleTreeSha256 => Hash::Sha256(SHA256(root_hash.try_into().unwrap())),
                     ProofType::Unknown => {
                         unimplemented!()
                     }
@@ -109,6 +114,7 @@ pub mod test {
     use crate::model::proof::ProofType;
     use crate::{Hash, TaiRootStore, TrustAnchorIdentifier};
 
+    #[derive(Debug)]
     pub struct TestStore {}
 
     impl TaiRootStore for TestStore {
@@ -118,6 +124,10 @@ pub mod test {
 
         fn root_hash(&self, _tai: &TrustAnchorIdentifier) -> Option<&Hash> {
             unimplemented!()
+        }
+
+        fn supported_tais(&self) -> Vec<TrustAnchorIdentifier> {
+            todo!()
         }
     }
 }

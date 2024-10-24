@@ -36,17 +36,26 @@ impl Encode for TLSSubjectInfo<'_> {
     }
 }
 
-//
-// impl Hashable for TLSSubjectInfo<'_> {}
-//
-// impl TLSSubjectInfo<'_> {
-//     pub(super) fn hash<D: Digest>(&self) -> Vec<u8> {
-//         D::digest(self.encode()).to_vec()
-//     }
-// }
+impl Subject<'_> {
+    pub fn into_owned(self) -> Subject<'static> {
+        match self {
+            Self::Tls(s) => Subject::Tls(s.into_owned()),
+            Self::Unknown(u) => Subject::Unknown(u.into_owned()),
+        }
+    }
+}
+
+impl TLSSubjectInfo<'_> {
+    pub fn into_owned(self) -> TLSSubjectInfo<'static> {
+        TLSSubjectInfo {
+            signature: self.signature,
+            public_key: self.public_key.into_owned(),
+        }
+    }
+}
 
 #[derive(Debug)]
-pub(super) enum SubjectType {
+pub(crate) enum SubjectType {
     Tls,
     Unknown,
 }

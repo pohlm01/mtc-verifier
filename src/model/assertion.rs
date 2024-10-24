@@ -6,43 +6,41 @@ use nom::IResult;
 
 #[derive(Debug, Clone)]
 pub struct Assertion<'a> {
-    pub(super) subject: Subject<'a>,
-    pub(super) claims: Vec<Claim<'a>>,
+    pub(crate) subject: Subject<'a>,
+    pub(super) claims: Vec<Claim>,
 }
 
-impl<'a> TryFrom<AssertionBinary<'a>> for Assertion<'a> {
+impl<'a> TryFrom<&'a AssertionBinary<'a>> for Assertion<'a> {
     type Error = nom::Err<Error<&'a [u8]>>;
 
-    fn try_from(assertion: AssertionBinary<'a>) -> Result<Self, Self::Error> {
+    fn try_from(assertion: &'a AssertionBinary<'a>) -> Result<Self, Self::Error> {
         let subject = match assertion.subject_type {
             SubjectType::Tls => {
-                let (bytes, info) = TLSSubjectInfo::decode(assertion.subject_info.0)?;
+                let (bytes, info) = TLSSubjectInfo::decode(assertion.subject_info.bytes())?;
                 assert!(bytes.is_empty());
                 Subject::Tls(info)
             }
-            SubjectType::Unknown => Subject::Unknown(assertion.subject_info),
+            SubjectType::Unknown => Subject::Unknown(assertion.subject_info.clone()),
         };
         Ok(Self {
             subject,
             claims: assertion
                 .claims
-                .into_iter()
+                .iter()
                 .map(Claim::try_from)
                 .collect::<Result<Vec<_>, _>>()?,
         })
     }
 }
 
-// impl<'a> From<Assertion<'_>> for AssertionBinary<'_> {
-//     fn from(a: Assertion) -> Self {
-//
-//         Self {
-//             subject_type,
-//             subject_info,
-//             claims: vec![],
-//         }
-//     }
-// }
+impl Assertion<'_> {
+    pub fn into_owned(self) -> Assertion<'static> {
+        Assertion {
+            subject: self.subject.into_owned(),
+            claims: self.claims,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub(super) struct AssertionBinary<'a> {
@@ -70,7 +68,10 @@ impl<'a> Decode<'a> for AssertionBinary<'a> {
 impl Encode for Assertion<'_> {
     fn encode(&self) -> Vec<u8> {
         let (subject_type, mut subject_info) = match &self.subject {
-            Subject::Tls(info) => (SubjectType::Tls, PayloadU16(&info.encode()).encode()),
+            Subject::Tls(info) => (
+                SubjectType::Tls,
+                PayloadU16::Borrowed(&info.encode()).encode(),
+            ),
             Subject::Unknown(bytes) => (SubjectType::Unknown, bytes.encode()),
         };
         let mut bytes = subject_type.encode();
