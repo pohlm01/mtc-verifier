@@ -207,7 +207,7 @@ pub enum SignatureScheme {
     RSA_PSS_SHA512,
     ED25519,
     ED448,
-    MlDsa44,
+    MlDsa87,
     Unknown(u16),
 }
 
@@ -228,7 +228,7 @@ impl<'a> Decode<'a> for SignatureScheme {
             0x0806 => Self::RSA_PSS_SHA512,
             0x0807 => Self::ED25519,
             0x0808 => Self::ED448,
-            0xfe3c => Self::MlDsa44,
+            0x0906 => Self::MlDsa87,
             _ => Self::Unknown(code),
         };
         Ok((bytes, sig))
@@ -251,7 +251,7 @@ impl Encode for SignatureScheme {
             SignatureScheme::RSA_PSS_SHA512 => vec![0x08, 0x06],
             SignatureScheme::ED25519 => vec![0x08, 0x07],
             SignatureScheme::ED448 => vec![0x08, 0x08],
-            SignatureScheme::MlDsa44 => vec![0xfe, 0x3c],
+            SignatureScheme::MlDsa87 => vec![0x09, 0x06],
             SignatureScheme::Unknown(_) => unimplemented!(),
         }
     }

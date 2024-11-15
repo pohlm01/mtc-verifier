@@ -7,7 +7,7 @@ use crate::{
 use log::{trace, warn};
 use nom::bytes::complete::take;
 use nom::IResult;
-use pqcrypto_mldsa::mldsa44;
+use pqcrypto_mldsa::mldsa87;
 use pqcrypto_traits::sign::DetachedSignature;
 use pqcrypto_traits::sign::PublicKey;
 use std::collections::HashMap;
@@ -205,7 +205,7 @@ fn verify_ca_signature(
     validity_window: &[u8],
     signature: &[u8],
 ) -> Result<(), Error> {
-    let public_key = if matches!(params.public_key.signature, SignatureScheme::MlDsa44) {
+    let public_key = if matches!(params.public_key.signature, SignatureScheme::MlDsa87) {
         PublicKey::from_bytes(params.public_key.public_key.bytes()).unwrap()
     } else {
         Err(Error::Something(
@@ -217,7 +217,7 @@ fn verify_ca_signature(
     labeled_validity_window.append(&mut params.issuer.encode());
     labeled_validity_window.extend_from_slice(validity_window);
 
-    mldsa44::verify_detached_signature(
+    mldsa87::verify_detached_signature(
         &DetachedSignature::from_bytes(signature).unwrap(),
         &labeled_validity_window,
         &public_key,
