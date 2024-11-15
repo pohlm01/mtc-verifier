@@ -1,12 +1,15 @@
 use crate::model::trust_anchor_identifier::BatchNumber;
 use crate::model::{Decode, HashSize};
 use crate::{
-    Hash, Issuer, PayloadU16, ProofType, TLSSubjectInfo, TaiRootStore, TrustAnchorIdentifier,
-    SHA256,
+    Encode, Hash, Issuer, PayloadU16, ProofType, SignatureScheme, TLSSubjectInfo, TaiRootStore,
+    TrustAnchorIdentifier, SHA256,
 };
-use log::warn;
+use log::{trace, warn};
 use nom::bytes::complete::take;
 use nom::IResult;
+use pqcrypto_mldsa::mldsa44;
+use pqcrypto_traits::sign::DetachedSignature;
+use pqcrypto_traits::sign::PublicKey;
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
@@ -14,16 +17,16 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
-struct CAParams {
-    issuer: Issuer,
-    public_key: TLSSubjectInfo<'static>,
-    proof_type: ProofType,
-    start_time: u64,
-    batch_duration: u64,
-    lifetime: u64,
-    validity_window_size: u32,
-    storage_window_size: u64,
-    http_server: String,
+pub(crate) struct CAParams {
+    pub(crate) issuer: Issuer,
+    pub(crate) public_key: TLSSubjectInfo<'static>,
+    pub(crate) proof_type: ProofType,
+    pub(crate) start_time: u64,
+    pub(crate) batch_duration: u64,
+    pub(crate) lifetime: u64,
+    pub(crate) validity_window_size: u32,
+    pub(crate) storage_window_size: u64,
+    pub(crate) http_server: String,
 }
 
 impl<'a> Decode<'a> for CAParams {
@@ -64,6 +67,12 @@ struct ValidityWindow<T> {
     tree_heads: Vec<T>,
 }
 
+#[derive(Debug)]
+struct LabeledValidityWindow<T> {
+    issuer: Issuer,
+    validity_window: ValidityWindow<T>,
+}
+
 impl<'a, H> ValidityWindow<H>
 where
     H: HashSize + Decode<'a>,
@@ -99,7 +108,7 @@ pub struct OsMtcRootStore {
 pub enum Error {
     Io(std::io::Error),
     Decode,
-    Something,
+    Something(&'static str),
 }
 
 impl From<std::io::Error> for Error {
@@ -151,13 +160,14 @@ impl OsMtcRootStore {
                         batch_num += 1;
                     }
 
-                    res.cas.insert(ca_params.issuer.clone(), ca_params);
+                    res.cas
+                        .insert(ca_params.issuer.clone(), ca_params);
                 } else {
                     continue;
                 }
             }
         }
-        Ok(dbg!(res))
+        Ok(res)
     }
 }
 
@@ -170,16 +180,54 @@ fn read_single_ca_dir(path: &Path) -> Result<(CAParams, ValidityWindow<SHA256>),
     f.read_to_end(&mut param_bytes)?;
     let (_, params) = CAParams::decode(&param_bytes)?;
 
+    let mut signature_path = PathBuf::from(path);
+    signature_path.push("signature");
+    let mut f = File::open(signature_path)?;
+    let mut signature_bytes = vec![];
+    f.read_to_end(&mut signature_bytes)?;
+
     let mut validity_window_path = PathBuf::from(path);
     validity_window_path.push("validity-window");
     let mut f = File::open(validity_window_path)?;
-    let mut param_bytes = vec![];
-    f.read_to_end(&mut param_bytes)?;
+    let mut validity_window_bytes = vec![];
+    f.read_to_end(&mut validity_window_bytes)?;
+
+    verify_ca_signature(&params, &validity_window_bytes, &signature_bytes)?;
+
     let (_, validity_window) =
-        ValidityWindow::decode(&param_bytes, params.validity_window_size as usize)?;
-    dbg!(&validity_window);
+        ValidityWindow::decode(&validity_window_bytes, params.validity_window_size as usize)?;
 
     Ok((params, validity_window))
+}
+
+fn verify_ca_signature(
+    params: &CAParams,
+    validity_window: &[u8],
+    signature: &[u8],
+) -> Result<(), Error> {
+    let public_key = if matches!(params.public_key.signature, SignatureScheme::MlDsa44) {
+        PublicKey::from_bytes(params.public_key.public_key.bytes()).unwrap()
+    } else {
+        Err(Error::Something(
+            "cannot read CA public key as key the algorithm is not supported",
+        ))?
+    };
+
+    let mut labeled_validity_window = Vec::from(b"Merkle Tree Crts ValidityWindow\0");
+    labeled_validity_window.append(&mut params.issuer.encode());
+    labeled_validity_window.extend_from_slice(validity_window);
+
+    mldsa44::verify_detached_signature(
+        &DetachedSignature::from_bytes(signature).unwrap(),
+        &labeled_validity_window,
+        &public_key,
+    )
+    .map_err(|err| {
+        dbg!(err);
+        Error::Something("could not verify signature")
+    })?;
+    trace!("Successfully verified CA signature");
+    Ok(())
 }
 
 impl TaiRootStore for OsMtcRootStore {
@@ -191,7 +239,14 @@ impl TaiRootStore for OsMtcRootStore {
         self.trust_roots.get(tai)
     }
 
+    fn ca_params(&self, issuer: &Issuer) -> Option<&CAParams> {
+        self.cas.get(issuer)
+    }
+
     fn supported_tais(&self) -> Vec<TrustAnchorIdentifier> {
-        self.trust_roots.keys().cloned().collect()
+        self.trust_roots
+            .keys()
+            .cloned()
+            .collect()
     }
 }

@@ -3,7 +3,7 @@ use nom::bytes::complete::take;
 use nom::IResult;
 use std::fmt::{Debug, Display, Formatter};
 use std::num::ParseIntError;
-use std::ops::{Deref, Sub};
+use std::ops::{Deref, Mul, Sub};
 use std::str::FromStr;
 
 #[derive(Eq, PartialEq, Hash, Clone)]
@@ -21,9 +21,19 @@ impl Sub<usize> for BatchNumber {
     }
 }
 
+impl Mul<u64> for BatchNumber {
+    type Output = u64;
+
+    fn mul(self, rhs: u64) -> Self::Output {
+        self.0 as u64 * rhs
+    }
+}
+
 impl Encode for Issuer {
     fn encode(&self) -> Vec<u8> {
-        self.0 .0.to_vec()
+        let mut res = vec![self.0 .0.len() as u8];
+        res.extend_from_slice(&self.0 .0);
+        res
     }
 }
 

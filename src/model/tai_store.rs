@@ -9,6 +9,7 @@ use std::fmt::Debug;
 pub trait TaiRootStore: Debug {
     fn proof_type(&self, tai: &TrustAnchorIdentifier) -> Option<ProofType>;
     fn root_hash(&self, tai: &TrustAnchorIdentifier) -> Option<&Hash>;
+    fn ca_params(&self, issuer: &Issuer) -> Option<&crate::CAParams>;
     fn supported_tais(&self) -> Vec<TrustAnchorIdentifier>;
 }
 
@@ -47,6 +48,10 @@ impl TaiRootStore for MemoryTaiRootStore {
             hash
         );
         hash
+    }
+
+    fn ca_params(&self, issuer: &Issuer) -> Option<&crate::CAParams> {
+        todo!()
     }
 
     fn supported_tais(&self) -> Vec<TrustAnchorIdentifier> {
@@ -112,7 +117,8 @@ impl MemoryTaiRootStore {
 #[cfg(test)]
 pub mod test {
     use crate::model::proof::ProofType;
-    use crate::{Hash, TaiRootStore, TrustAnchorIdentifier};
+    use crate::{Hash, Issuer, TaiRootStore, TrustAnchorIdentifier};
+    use crate::trust_store::CAParams;
 
     #[derive(Debug)]
     pub struct TestStore {}
@@ -124,6 +130,10 @@ pub mod test {
 
         fn root_hash(&self, _tai: &TrustAnchorIdentifier) -> Option<&Hash> {
             unimplemented!()
+        }
+
+        fn ca_params(&self, issuer: &Issuer) -> Option<&CAParams> {
+            todo!()
         }
 
         fn supported_tais(&self) -> Vec<TrustAnchorIdentifier> {

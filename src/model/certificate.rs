@@ -1,6 +1,5 @@
 use crate::model::assertion::AssertionBinary;
 use crate::model::proof::{Proof, ProofBinary, ProofData};
-// use crate::model::tai_store::test::TestStore;
 use crate::model::tree::{HashAssertionInput, HashNodeInput};
 use crate::model::{Assertion, Decode, Encode, Hashable};
 use crate::{Error, Hash, SignatureScheme, Subject, TaiRootStore};
